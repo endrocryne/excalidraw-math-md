@@ -61,6 +61,7 @@ import { ShapeCache } from "../scene/ShapeCache";
 import { getVerticalOffset } from "../fonts";
 import { isRightAngleRads } from "../../math";
 import { getCornerRadius } from "../shapes";
+import { renderMarkdownText, shouldRenderMarkdown } from "../markdownRenderer";
 
 // using a stronger invert (100% vs our regular 93%) and saturate
 // as a temp hack to make images in dark theme look closer to original
@@ -479,9 +480,6 @@ const drawElementOnCanvas = (
         context.fillStyle = element.strokeColor;
         context.textAlign = element.textAlign as CanvasTextAlign;
 
-        // Canvas does not support multiline text by default
-        const lines = element.text.replace(/\r\n?/g, "\n").split("\n");
-
         const horizontalOffset =
           element.textAlign === "center"
             ? element.width / 2
@@ -500,12 +498,20 @@ const drawElementOnCanvas = (
           lineHeightPx,
         );
 
-        for (let index = 0; index < lines.length; index++) {
-          context.fillText(
-            lines[index],
-            horizontalOffset,
-            index * lineHeightPx + verticalOffset,
-          );
+        // Check if we should render with markdown formatting
+        if (shouldRenderMarkdown(element)) {
+          renderMarkdownText(context, element, horizontalOffset, verticalOffset);
+        } else {
+          // Canvas does not support multiline text by default
+          const lines = element.text.replace(/\r\n?/g, "\n").split("\n");
+
+          for (let index = 0; index < lines.length; index++) {
+            context.fillText(
+              lines[index],
+              horizontalOffset,
+              index * lineHeightPx + verticalOffset,
+            );
+          }
         }
         context.restore();
         if (shouldTemporarilyAttach) {
