@@ -24,17 +24,19 @@ export const parseInlineMarkdown = (text: string): MarkdownSegment[] => {
 
   // Regular expressions for inline markdown
   // Bold: **text** or __text__
-  // Italic: *text* or _text_
+  // Italic: *text* or _text_ (but not ** or __)
   // Strikethrough: ~~text~~
   // Underline: <u>text</u> (HTML-style, as markdown doesn't have native underline)
+  // Note: Order matters - check bold/strikethrough before italic to avoid overlaps
+  // Use negative lookahead/lookbehind to prevent single * from matching when part of **
 
   const patterns = [
-    { regex: /\*\*(.+?)\*\*/g, format: "bold" },
-    { regex: /__(.+?)__/g, format: "bold" },
-    { regex: /\*(.+?)\*/g, format: "italic" },
-    { regex: /_(.+?)_/g, format: "italic" },
-    { regex: /~~(.+?)~~/g, format: "strikethrough" },
-    { regex: /<u>(.+?)<\/u>/g, format: "underline" },
+    { regex: /\*\*(.+?)\*\*/g, format: "bold", priority: 1 },
+    { regex: /__(.+?)__/g, format: "bold", priority: 1 },
+    { regex: /~~(.+?)~~/g, format: "strikethrough", priority: 1 },
+    { regex: /(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, format: "italic", priority: 2 },
+    { regex: /(?<!_)_(?!_)(.+?)_(?!_)/g, format: "italic", priority: 2 },
+    { regex: /<u>(.+?)<\/u>/g, format: "underline", priority: 1 },
   ];
 
   // Find all matches across all patterns
@@ -43,26 +45,46 @@ export const parseInlineMarkdown = (text: string): MarkdownSegment[] => {
     length: number;
     text: string;
     format: string;
+    priority: number;
   }> = [];
 
-  patterns.forEach(({ regex, format }) => {
-    let match;
-    const r = new RegExp(regex.source, regex.flags);
-    while ((match = r.exec(text)) !== null) {
+  patterns.forEach(({ regex, format, priority }) => {
+    // Use matchAll to get all matches without stateful behavior
+    const matches = [...text.matchAll(regex)];
+    matches.forEach((match) => {
       allMatches.push({
-        index: match.index,
+        index: match.index!,
         length: match[0].length,
         text: match[1],
         format,
+        priority,
       });
-    }
+    });
   });
 
-  // Sort matches by position
-  allMatches.sort((a, b) => a.index - b.index);
+  // Sort matches by position, then by priority (lower priority wins for same position)
+  allMatches.sort((a, b) => {
+    if (a.index !== b.index) {
+      return a.index - b.index;
+    }
+    return a.priority - b.priority;
+  });
+
+  // Remove overlapping matches (keep higher priority ones)
+  const filteredMatches: typeof allMatches = [];
+  for (const match of allMatches) {
+    const overlaps = filteredMatches.some(
+      (existing) =>
+        match.index >= existing.index &&
+        match.index < existing.index + existing.length,
+    );
+    if (!overlaps) {
+      filteredMatches.push(match);
+    }
+  }
 
   // Build segments
-  allMatches.forEach((match) => {
+  filteredMatches.forEach((match) => {
     // Add plain text before this match
     if (match.index > currentPos) {
       segments.push({
