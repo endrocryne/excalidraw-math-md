@@ -5,6 +5,7 @@ import { getDefaultAppState } from "../packages/excalidraw/appState";
 import { ErrorDialog } from "../packages/excalidraw/components/ErrorDialog";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
 import { useMathSubtype } from "../packages/excalidraw/element/subtypes/mathjax";
+import { startAutosave, stopAutosave } from "../packages/excalidraw/autosave";
 import {
   APP_NAME,
   EVENT,
@@ -606,6 +607,25 @@ const ExcalidrawWrapper = () => {
     window.addEventListener(EVENT.BEFORE_UNLOAD, unloadHandler);
     return () => {
       window.removeEventListener(EVENT.BEFORE_UNLOAD, unloadHandler);
+    };
+  }, [excalidrawAPI]);
+
+  // Autosave integration
+  useEffect(() => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    // Start autosave with the API methods
+    startAutosave(
+      () => excalidrawAPI.getSceneElements(),
+      () => excalidrawAPI.getAppState(),
+      () => excalidrawAPI.getFiles(),
+    );
+
+    // Clean up on unmount
+    return () => {
+      stopAutosave();
     };
   }, [excalidrawAPI]);
 
